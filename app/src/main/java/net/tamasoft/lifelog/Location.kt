@@ -162,7 +162,10 @@ class LocationUploadWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c,
             if (batch.isEmpty()) break
             for (f in batch) {
                 val body = runCatching { f.readBytes() }.getOrNull() ?: continue      // already sent by another run
-                val r = Http.post("$url/owntracks/$token", body, "application/json", timeoutMs = 30_000)
+                // Named, as phone use is, so the receiver can tell this app from the
+                // OwnTracks app on the same route while both run.
+                val r = Http.post("$url/owntracks/$token", body, "application/json",
+                    mapOf("X-Sender" to UsageWorker.SENDER), timeoutMs = 30_000)
                 when {
                     r.ok -> { q.done(f); sent++ }
                     r.refused -> { q.refuse(f); prefs.err(Module.LOCATION, "The receiver refused a message: ${r.body.take(200)}") }

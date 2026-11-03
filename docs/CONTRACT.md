@@ -45,7 +45,10 @@ One OwnTracks message per request (owntracks.org/booklet/tech/json):
 `location` every 15 minutes (`lat`, `lon`, `acc`, `alt`, `vac`, `vel`, `cog`,
 `batt`, `bs`, `conn`, `tst`, `tid`, `topic`, `m`, `inregions`), and
 `transition` on entering or leaving a region. Queued on the phone until the
-server answers 2xx.
+server answers 2xx. Header `X-Sender: lifelog` (since 0.1.2), so the receiver
+can tell this app from the OwnTracks app on the same route; an older Lifelog
+is told apart by the `qos` field, which the OwnTracks app always sends and
+Lifelog never does.
 
 ## Phone use: `POST {url}/activitywatch/{tokens.usage}`
 
