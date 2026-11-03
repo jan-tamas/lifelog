@@ -2,6 +2,7 @@ package net.tamasoft.lifelog
 
 import android.Manifest
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -51,6 +52,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import net.tamasoft.lifelog.core.PairConfig
 import java.text.DateFormat
@@ -60,10 +67,25 @@ class MainActivity : ComponentActivity() {
     private var pending by mutableStateOf<PairConfig?>(null)
     private var pairError by mutableStateOf<String?>(null)
     private var tick by mutableIntStateOf(0)
+    // Each module's "Send now" job while it waits or runs, by module key.
+    private var sending by mutableStateOf<Map<String, WorkInfo.State>>(emptyMap())
+    private var watch: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handle(intent)
+        // A job finishing writes its result to settings, which the screen does not
+        // watch by itself: without this a press showed nothing until the app was reopened.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                WorkManager.getInstance(this@MainActivity).getWorkInfosByTagFlow(Scheduler.NOW).collect { infos ->
+                    sending = infos.filter { !it.state.isFinished }.mapNotNull { w ->
+                        w.tags.firstOrNull { it.startsWith("${Scheduler.NOW}-") }?.let { it.removePrefix("${Scheduler.NOW}-") to w.state }
+                    }.toMap()
+                    bump()
+                }
+            }
+        }
         setContent {
             val dark = isSystemInDarkTheme()
             val scheme = when {
@@ -76,6 +98,25 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) { Screen() }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        shown = true
+        watch = Prefs(this).watchStatus { bump() }
+    }
+
+    override fun onStop() {
+        shown = false
+        watch?.let { Prefs(this).unwatch(it) }
+        watch = null
+        super.onStop()
+    }
+
+    companion object {
+        /** Whether this screen is on show. Health Connect lets an app read while it is, and
+         *  needs "read in the background" otherwise, so a health send says which it was. */
+        @Volatile var shown = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -246,7 +287,12 @@ class MainActivity : ComponentActivity() {
             if (prefs.on(m)) {
                 content()
                 Status(prefs, m)
-                TextButton({ Scheduler.now(c, m); bump() }) { Text("Send now") }
+                when (sending[m.key]) {
+                    null -> TextButton({ Scheduler.now(c, m); bump() }) { Text("Send now") }
+                    WorkInfo.State.RUNNING -> Text("Sending…", style = MaterialTheme.typography.bodySmall)
+                    else -> Text(if (m == Module.PHOTOS) "Waiting for Wi-Fi…" else "Waiting for a connection…",
+                        style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
@@ -258,6 +304,8 @@ class MainActivity : ComponentActivity() {
         prefs.noteOf(m)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         val ok = prefs.lastOk(m)
         if (ok > 0) Text("Last sent ${time(ok)}: ${prefs.lastOkWhat(m) ?: ""}", style = MaterialTheme.typography.bodySmall)
+        val idle = prefs.lastIdle(m)
+        if (idle > ok) Text("Checked ${time(idle)}: nothing new to send", style = MaterialTheme.typography.bodySmall)
         prefs.lastErr(m)?.let {
             Text("${time(prefs.lastErrAt(m))}: $it", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)

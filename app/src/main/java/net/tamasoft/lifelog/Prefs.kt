@@ -49,12 +49,22 @@ class Prefs(c: Context) {
         .putString("okwhat.${m.key}", what).remove("err.${m.key}").apply()
     fun err(m: Module, why: String) = p.edit().putString("err.${m.key}", why)
         .putLong("errat.${m.key}", System.currentTimeMillis()).apply()
+    /** A run that found nothing to send: not a send, so "Last sent" keeps its time. */
+    fun idle(m: Module) = p.edit().putLong("idle.${m.key}", System.currentTimeMillis()).remove("err.${m.key}").apply()
     fun note(m: Module, what: String?) = p.edit().putString("note.${m.key}", what).apply()
     fun lastOk(m: Module) = p.getLong("ok.${m.key}", 0)
     fun lastOkWhat(m: Module) = p.getString("okwhat.${m.key}", null)
     fun lastErr(m: Module) = p.getString("err.${m.key}", null)
     fun lastErrAt(m: Module) = p.getLong("errat.${m.key}", 0)
     fun noteOf(m: Module) = p.getString("note.${m.key}", null)
+    fun lastIdle(m: Module) = p.getLong("idle.${m.key}", 0)
+
+    /** Calls [changed] on the main thread when a job writes what the status screen shows.
+     *  Android keeps only a weak reference, so the caller holds the one returned. */
+    fun watchStatus(changed: () -> Unit) = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+        if (k == null || STATUS.any { k.startsWith(it) }) changed()
+    }.also { p.registerOnSharedPreferenceChangeListener(it) }
+    fun unwatch(l: SharedPreferences.OnSharedPreferenceChangeListener) = p.unregisterOnSharedPreferenceChangeListener(l)
 
     /** Forget everything a server gave, and turn every module off. */
     fun unpair() = p.edit().clear().apply()
@@ -66,5 +76,6 @@ class Prefs(c: Context) {
         const val HEALTH_HOURS = "health.hours"
         const val PHOTOS_MARK_ADDED = "photos.markAdded"
         const val PHOTOS_MARK_ID = "photos.markId"
+        private val STATUS = listOf("ok.", "err.", "idle.", "note.")
     }
 }

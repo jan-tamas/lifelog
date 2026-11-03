@@ -39,6 +39,7 @@ class HealthWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) {
         val token = cfg.tokens["health"] ?: return@withContext Result.success()
         if (!Health.available(c)) { prefs.err(Module.HEALTH, "Health Connect is not available on this phone."); return@withContext Result.success() }
         val now = Instant.now()
+        val closed = !MainActivity.shown
         var records = 0
         var sends = 0
 
@@ -95,7 +96,8 @@ class HealthWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) {
             return@withContext Result.retry()
         }
         prefs.setLong(Prefs.HEALTH_MARK, now.toEpochMilli())
-        prefs.ok(Module.HEALTH, if (sends == 0) "Nothing new" else "Sent $records record(s) in $sends send(s)")
+        if (sends == 0) prefs.idle(Module.HEALTH)
+        else prefs.ok(Module.HEALTH, "Sent $records record(s) in $sends send(s)" + if (closed) ", with the app closed" else "")
         Result.success()
     }
 }

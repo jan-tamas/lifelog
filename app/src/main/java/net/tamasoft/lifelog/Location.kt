@@ -171,7 +171,7 @@ class LocationUploadWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c,
                 }
             }
         }
-        if (sent > 0) prefs.ok(Module.LOCATION, "Sent $sent message(s)")
+        if (sent > 0) prefs.ok(Module.LOCATION, "Sent $sent message(s)") else prefs.idle(Module.LOCATION)
         return Result.success()
     }
 

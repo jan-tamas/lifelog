@@ -56,9 +56,14 @@ object Scheduler {
             Module.PHOTOS -> PhotoWorker::class.java
             Module.LOCATION -> LocationUploadWorker::class.java
         }
-        val req = androidx.work.OneTimeWorkRequest.Builder(cls).setConstraints(connected).build()
-        WorkManager.getInstance(c).enqueueUniqueWork("now-${m.key}", ExistingWorkPolicy.REPLACE, req)
+        val req = androidx.work.OneTimeWorkRequest.Builder(cls)
+            .setConstraints(if (m == Module.PHOTOS) unmetered else connected)
+            .addTag(NOW).addTag("$NOW-${m.key}").build()
+        // KEEP: pressed again while a send waits or runs, it carries on rather than starting over.
+        WorkManager.getInstance(c).enqueueUniqueWork("now-${m.key}", ExistingWorkPolicy.KEEP, req)
     }
+
+    const val NOW = "now"
 
     /** After a new location message: send it as soon as there is a network. */
     fun locationQueued(c: Context) {

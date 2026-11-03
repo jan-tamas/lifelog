@@ -77,7 +77,7 @@ class UsageWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) {
         val sent = if (sentFile.exists()) sentFile.readLines().mapNotNull {
             it.split('\t').takeIf { p -> p.size == 2 }?.let { p -> p[0] to p[1] } }.toMap() else emptyMap()
         val days = Usage.daysToSend(today, built, sent)
-        if (days.isEmpty()) return Result.success()
+        if (days.isEmpty()) { prefs.idle(Module.USAGE); return Result.success() }
         val body = days.joinToString("") { built.getValue(it) + "\n" }
         val r = Http.post("${cfg.url}/activitywatch/$token", body.toByteArray(), "application/x-ndjson",
             mapOf("X-Sender" to SENDER), timeoutMs = 900_000)

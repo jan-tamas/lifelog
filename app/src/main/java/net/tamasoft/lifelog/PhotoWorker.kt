@@ -105,11 +105,12 @@ class PhotoWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) {
             MediaStore.Images.Media.DATE_ADDED, MediaStore.Images.Media.DATE_TAKEN,
             MediaStore.Images.Media.DATE_MODIFIED)
         var tried = 0
+        var metered = false
         c.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, sel,
             arrayOf((mark - 3600).toString(), CAMERA),
             "${MediaStore.Images.Media.DATE_ADDED} ASC, ${MediaStore.Images.Media._ID} ASC")?.use { cur ->
             while (cur.moveToNext() && tried < 100) {
-                if (c.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) break
+                if (c.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) { metered = true; break }
                 val id = cur.getLong(0)
                 if (held.has(id)) continue
                 val name = cur.getString(1) ?: "$id.jpg"
@@ -120,8 +121,10 @@ class PhotoWorker(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) {
         }
         if (sent > 0 || removed > 0) prefs.ok(Module.PHOTOS, listOfNotNull(
             if (sent > 0) "sent $sent photo(s)" else null,
-            if (removed > 0) "removed $removed deleted on the phone" else null)
+            if (removed > 0) "removed $removed deleted on the phone" else null,
+            if (metered) "the rest wait for Wi-Fi" else null)
             .joinToString(", ").replaceFirstChar { it.uppercase() })
+        else if (!metered) prefs.idle(Module.PHOTOS)
         Result.success()
     }
 
