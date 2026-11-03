@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0              # the version code counts commits, as release.sh does
 
       - uses: actions/setup-java@v6
         with:
@@ -30,7 +32,7 @@ jobs:
 
       - name: Build test copy
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        run: gradle --no-daemon testDebugUnitTest assembleDebug -PversionCode=${{ github.run_number }}
+        run: gradle --no-daemon testDebugUnitTest assembleDebug -PversionCode=$(git rev-list --count HEAD)
 
       - uses: actions/upload-artifact@v7
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -49,7 +51,7 @@ jobs:
           export KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
           echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
           gradle --no-daemon testDebugUnitTest assembleRelease \
-            -PversionCode=${{ github.run_number }} -PversionName="${GITHUB_REF_NAME#v}"
+            -PversionCode=$(git rev-list --count HEAD) -PversionName="${GITHUB_REF_NAME#v}"
           mv app/build/outputs/apk/release/app-release.apk "lifelog-${GITHUB_REF_NAME}.apk"
 
       - uses: softprops/action-gh-release@v3

@@ -60,6 +60,9 @@ A tag `v*` builds a signed release in GitHub Actions once the repository has
 four secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`,
 `KEY_PASSWORD`. A local release build reads the same four from the
 environment (`KEYSTORE_FILE` in place of the base64).
+Both number a version by the count of commits, so a release built in either
+place is newer than one built before it; Android refuses an update whose
+number is lower than the installed one's.
 
 The unit tests also write one example of every payload to
 `app/build/contract/`, for the server's own contract test.
