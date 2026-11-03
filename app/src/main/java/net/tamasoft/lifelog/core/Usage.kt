@@ -175,13 +175,11 @@ object Usage {
     /**
      * Which days to send: today and yesterday always (they are still filling),
      * and any older day of the last [windowDays] whose snapshot changed since the
-     * receiver last accepted it. Never a day before [firstDay]: the days before
-     * belong to whichever sender came before, and a day sent from here without
-     * that sender's events would be filed as all of them removed.
+     * receiver last accepted it.
      */
-    fun daysToSend(today: String, firstDay: String, built: Map<String, String>,
+    fun daysToSend(today: String, built: Map<String, String>,
                    sent: Map<String, String>, windowDays: Long = 14): List<String> {
-        val floor = maxOf(firstDay, Times.plusDays(today, -windowDays))
+        val floor = Times.plusDays(today, -windowDays)
         val yesterday = Times.plusDays(today, -1)
         return built.keys.filter { it >= floor && it <= today }.sorted().filter { d ->
             d == today || d == yesterday || sent[d] != Usage.md5(built.getValue(d))

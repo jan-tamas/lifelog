@@ -60,11 +60,9 @@ class Prefs(c: Context) {
     fun unpair() = p.edit().clear().apply()
 
     companion object {
-        const val USAGE_FIRST_DAY = "usage.firstDay"
-        const val USAGE_OWN_RECEIVED = "usage.ownReceived"
-        const val USAGE_OTHER_OFF = "usage.otherSenderOff"
-        const val USAGE_ADOPT = "usage.adoptNextReceived"
         const val HEALTH_MARK = "health.mark"
+        const val HEALTH_CHANGES = "health.changesToken"
+        const val HEALTH_CHANGES_KINDS = "health.changesKinds"
         const val HEALTH_HOURS = "health.hours"
         const val PHOTOS_MARK_ADDED = "photos.markAdded"
         const val PHOTOS_MARK_ID = "photos.markId"

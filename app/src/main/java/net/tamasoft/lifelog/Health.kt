@@ -2,6 +2,7 @@ package net.tamasoft.lifelog
 
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.feature.ExperimentalMindfulnessSessionApi
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
@@ -21,9 +22,11 @@ import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import net.tamasoft.lifelog.core.HealthJson
+import kotlinx.coroutines.CancellationException
 import net.tamasoft.lifelog.core.Meta
 import org.json.JSONObject
 import java.time.Instant
@@ -34,6 +37,11 @@ import kotlin.reflect.KClass
  * Reads Health Connect and writes HC Webhook's JSON (core/HealthJson.kt), the
  * shape the receiver's health route already takes. Reads only; writes nothing.
  * A kind the owner did not allow is simply not read.
+ *
+ * Two ways in: [read], every record whose START falls in a time range (that is
+ * how Health Connect filters), and [changes], its change feed: every record
+ * written or rewritten since a token, whatever moment it describes. The feed
+ * is what catches a night's sleep, which the watch writes hours after it began.
  */
 @OptIn(ExperimentalMindfulnessSessionApi::class)
 object Health {
@@ -62,6 +70,48 @@ object Health {
 
     suspend fun granted(c: Context): Set<String> =
         if (!available(c)) emptySet() else HealthConnectClient.getOrCreate(c).permissionController.getGrantedPermissions()
+
+    /**
+     * The kinds the owner allowed that this phone's Health Connect also knows,
+     * by name. A kind it does not know answers a read with "unsupported record
+     * type" (an IllegalArgumentException), and would fail a change token too.
+     */
+    suspend fun readable(c: Context): Set<String> {
+        val client = HealthConnectClient.getOrCreate(c)
+        val granted = client.permissionController.getGrantedPermissions()
+        val now = Instant.now()
+        return KINDS.filter { (_, cls) ->
+            HealthPermission.getReadPermission(cls) in granted && try {
+                client.readRecords(ReadRecordsRequest(cls, TimeRangeFilter.between(now.minusSeconds(1), now), pageSize = 1))
+                true
+            } catch (e: IllegalArgumentException) { false }
+        }.keys
+    }
+
+    /** A token for the change feed of these kinds: what is written from now on. */
+    suspend fun changesToken(c: Context, kinds: Set<String>): String =
+        HealthConnectClient.getOrCreate(c).getChangesToken(ChangesTokenRequest(kinds.map { KINDS.getValue(it) }.toSet()))
+
+    /** One page of the change feed. `expired`: the token is too old, nothing was read. */
+    class Changes(val records: Map<String, List<JSONObject>>, val next: String, val more: Boolean, val expired: Boolean)
+
+    /**
+     * One page of what was written or rewritten since [token], as {kind: [record, ...]}.
+     * A deletion is left out: the receiver keeps what it was sent.
+     */
+    suspend fun changes(c: Context, token: String): Changes {
+        val client = HealthConnectClient.getOrCreate(c)
+        val granted = client.permissionController.getGrantedPermissions()
+        val resp = client.getChanges(token)
+        if (resp.changesTokenExpired) return Changes(emptyMap(), token, more = false, expired = true)
+        val out = LinkedHashMap<String, MutableList<JSONObject>>()
+        for (ch in resp.changes) {
+            if (ch !is UpsertionChange) continue
+            val kind = KINDS.entries.firstOrNull { it.value.isInstance(ch.record) }?.key ?: continue
+            out.getOrPut(kind) { mutableListOf() }.addAll(json(client, granted, ch.record))
+        }
+        return Changes(out, resp.nextChangesToken, resp.hasMore, expired = false)
+    }
 
     private fun meta(m: Metadata, zone: ZoneOffset? = null, start: ZoneOffset? = null, end: ZoneOffset? = null) = Meta(
         origin = m.dataOrigin.packageName, method = m.recordingMethod, id = m.id,
@@ -131,12 +181,12 @@ object Health {
             var steps: Long? = null
             if (HealthPermission.getReadPermission(DistanceRecord::class) in granted &&
                 HealthPermission.getReadPermission(StepsRecord::class) in granted) {
-                runCatching {
+                try {
                     val a = client.aggregate(AggregateRequest(setOf(DistanceRecord.DISTANCE_TOTAL, StepsRecord.COUNT_TOTAL),
                         TimeRangeFilter.between(r.startTime, r.endTime)))
                     meters = a[DistanceRecord.DISTANCE_TOTAL]?.inMeters
                     steps = a[StepsRecord.COUNT_TOTAL]
-                }
+                } catch (e: CancellationException) { throw e } catch (_: Exception) { }   // a workout is sent without them
             }
             listOf(HealthJson.exercise(r.exerciseType, r.title, r.startTime, r.endTime, meters, steps,
                 meta(r.metadata, null, r.startZoneOffset, r.endZoneOffset)))

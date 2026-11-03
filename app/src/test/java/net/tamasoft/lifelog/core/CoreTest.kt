@@ -117,14 +117,17 @@ class UsageTest {
         assertEquals(ms("2026-11-03T08:05:00Z"), r[1].third)
     }
 
-    @Test fun noDayBeforeTheFirstIsSent() {
+    @Test fun anOlderDayGoesOnlyWhenItChanged() {
         val built = mapOf("2026-11-01" to "a", "2026-11-02" to "b", "2026-11-03" to "c", "2026-11-04" to "d")
         val sent = mapOf("2026-11-02" to Usage.md5("b"))
-        assertEquals(listOf("2026-11-03", "2026-11-04"), Usage.daysToSend("2026-11-04", "2026-11-03", built, sent))
-        val sentAll = sent + ("2026-11-01" to Usage.md5("a"))
-        assertEquals(listOf("2026-11-03", "2026-11-04"), Usage.daysToSend("2026-11-04", "2026-11-01", built, sentAll))
+        assertEquals(listOf("2026-11-01", "2026-11-03", "2026-11-04"), Usage.daysToSend("2026-11-04", built, sent))
+        val sentAll = sent + ("2026-11-01" to Usage.md5("a")) + ("2026-11-03" to Usage.md5("c"))
+        // Today and yesterday go every time: they are still filling.
+        assertEquals(listOf("2026-11-03", "2026-11-04"), Usage.daysToSend("2026-11-04", built, sentAll))
         assertEquals(listOf("2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"),
-            Usage.daysToSend("2026-11-04", "2026-11-01", built, emptyMap()))
+            Usage.daysToSend("2026-11-04", built, emptyMap()))
+        // A day older than the window stays as it was sent, or unsent.
+        assertEquals(listOf("2026-11-04"), Usage.daysToSend("2026-11-20", built, emptyMap(), windowDays = 16))
     }
 }
 

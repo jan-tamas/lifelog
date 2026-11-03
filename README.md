@@ -31,6 +31,21 @@ It is not on Google Play: Play does not allow reading SMS and the call log
 outside a messaging or dialler app, and restricts accessibility services and
 usage access. Install the APK, or follow the repository with Obtainium.
 
+## Running beside the apps it replaces
+
+Lifelog can run alongside them for as long as you like, and the server keeps
+one copy of everything:
+
+- **Health**: Lifelog and HC Webhook read the same Health Connect records, and
+  the server keys a record by its moment and source, so one sent by both is one.
+- **Location**: both send OwnTracks messages under the same tracker; each
+  reading is its own moment, and a repeat is dropped by the server.
+- **Phone use**: Lifelog's pushes carry `X-Sender: lifelog`, and the server
+  files them apart from the ActivityWatch script's, showing one sender per day.
+- **Photos**: Lifelog's copies go into their own folder, the photo reader skips
+  a photo it has already read, and a photo deleted on the phone is deleted
+  from the server too, as Syncthing's mirror did.
+
 ## Pairing
 
 The server serves a pairing page (in the vault this is built for:

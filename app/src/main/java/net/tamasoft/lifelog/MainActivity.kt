@@ -51,8 +51,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
+import kotlinx.coroutines.CancellationException
 import net.tamasoft.lifelog.core.PairConfig
-import net.tamasoft.lifelog.core.Times
 import java.text.DateFormat
 import java.util.Date
 
@@ -114,7 +114,10 @@ class MainActivity : ComponentActivity() {
         val health = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { bump() }
         ask = { perms.launch(it) }
         askHealth = { health.launch(it) }
-        LaunchedEffect(tick) { healthGranted = runCatching { Health.granted(c) }.getOrDefault(emptySet()) }
+        LaunchedEffect(tick) {
+            // A newer tick cancels this one; that must not read as "nothing allowed".
+            healthGranted = try { Health.granted(c) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptySet() }
+        }
         // Everything shown is read from settings and permissions, not from Compose
         // state, so the whole body is rebuilt on every tick rather than trusting
         // Compose to know what changed.
@@ -338,30 +341,13 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun UsageCard(prefs: Prefs, cfg: PairConfig) {
         val c = LocalContext.current
-        val zone = prefs.zone
-        val today = Times.day(System.currentTimeMillis(), zone)
         ModuleSection(prefs, cfg, Module.USAGE,
             "Which apps were in front and for how long, and each unlock. The parts below are " +
-                "each off until you turn them on.",
-            onEnable = {
-                if (prefs.string(Prefs.USAGE_FIRST_DAY) == null) prefs.setString(Prefs.USAGE_FIRST_DAY, Times.plusDays(today, 1))
-            }) {
+                "each off until you turn them on.") {
             Need("Usage access", Perms.usageAccess(c)) { open(Settings.ACTION_USAGE_ACCESS_SETTINGS) }
-            val first = prefs.string(Prefs.USAGE_FIRST_DAY) ?: Times.plusDays(today, 1)
-            if (first > today) {
-                Text("Records from now; sends from $first. A day is sent whole, so the day it was turned " +
-                    "on stays with whatever sent it before.", style = MaterialTheme.typography.bodySmall)
-                TextButton({ prefs.setString(Prefs.USAGE_FIRST_DAY, today); bump() }) { Text("Send today too (nothing else sends it)") }
-            } else Text("Sends every day from $first.", style = MaterialTheme.typography.bodySmall)
-            if (prefs.lastErr(Module.USAGE)?.startsWith(UsageWorker.OTHER) == true) {
-                Button({
-                    prefs.setString(Prefs.USAGE_OWN_RECEIVED, null)
-                    prefs.setBool(Prefs.USAGE_OTHER_OFF, true)
-                    prefs.err(Module.USAGE, "Waiting for the next send.")
-                    Scheduler.now(c, Module.USAGE)
-                    bump()
-                }) { Text("The other sender is off") }
-            }
+            Text("Sends today and every day of the last week the phone still remembers. The receiver keeps " +
+                "these apart from another sender's, such as the Termux script, so both can run.",
+                style = MaterialTheme.typography.bodySmall)
             HorizontalDivider()
             Part(prefs, UsagePart.WEB, "The SITE and page title of each page in a browser, never the address.") {
                 Need("Browser watcher (Accessibility → Lifelog)", Perms.accessibility(c)) { open(Settings.ACTION_ACCESSIBILITY_SETTINGS) }

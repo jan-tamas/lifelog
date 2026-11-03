@@ -28,9 +28,16 @@ kinds `steps`, `distance`, `heart_rate`, `heart_rate_variability`,
 `total_calories`, `active_calories`, `weight`, `oxygen_saturation`,
 `skin_temperature`, `mindfulness`, each record with HC Webhook's field names
 and a `metadata` object (`data_origin`, `recording_method`, `id`, `device`, …).
-Sent every 12 hours by default, since the last accepted send with two hours of
-overlap, at most one day per request. The receiver must treat a record sent
-twice as one.
+Sent every 12 hours by default, from Health Connect's change feed: every
+record written or rewritten since the last accepted send, whatever moment it
+describes, one request per page of the feed. A time window would miss what
+the watch writes late (Health Connect filters a window by a record's start, and
+a night's sleep is written hours after it began). On the first send, and
+whenever the feed has to start again (the allowed kinds changed, or Health
+Connect let it expire), the records are read by time instead: from three days
+back on the first send, else from two days before the last good one, at most
+one day per request. Deletions are not sent. The receiver must treat a record
+sent twice, or sent by HC Webhook as well, as one.
 
 ## Location: `POST {url}/owntracks/{tokens.location}`
 
@@ -42,8 +49,9 @@ server answers 2xx.
 
 ## Phone use: `POST {url}/activitywatch/{tokens.usage}`
 
-Newline-delimited day snapshots, `{"day": "YYYY-MM-DD", "events": [...]}`,
-today and yesterday on every run and any older changed day of the last 14.
+Header `X-Sender: lifelog`. Newline-delimited day snapshots,
+`{"day": "YYYY-MM-DD", "events": [...]}`, today and yesterday on every run and
+any older changed day of the last 14 (the phone builds the last week).
 Events:
 
 | `src` | fields |
@@ -55,11 +63,21 @@ Events:
 | `call` | `ts` (local, with offset), `dur`, `dir`, `who` |
 | `sms` | `ts` (local, with offset), `dir`, `who`, `party` (`person`/`service`), `len`, `text` (a person's only) |
 
-A day is sent whole and the server is expected to file it as a delta, so
-Lifelog never sends a day before its first day, and stops while
-`GET {url}/activitywatch/health` shows another sender pushing after it.
+A day is sent whole and the server is expected to file it as a delta, and to
+keep each sender's days apart (by `X-Sender`), so that Lifelog and the
+ActivityWatch script it replaces can push side by side without one's view of a
+day undoing the other's.
 
 ## Photos: `POST {url}/photos/{tokens.photos}`
 
 The original image (EXIF intact) as the body, `X-Filename` and `X-Modified`
 (milliseconds) as headers. New camera photos only, on an unmetered network.
+The answer names the server's copy: `{"stored", "duplicate", "file": "lifelog/<name>"}`.
+
+## Photo deletions: `POST {url}/photos/{tokens.photos}/deleted`
+
+`{"files": ["lifelog/<name>", …]}`, the `file` names the server gave, for the
+photos that have left the phone's camera folder (deleted, in the trash, or
+moved out), so the server does not keep a photo the phone no longer has. The
+answer is `{"deleted": n, "missing": m}`; both mean done. A photo taken back
+out of the trash is sent again as a new one.
