@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lifelog</string>
+    <string name="web_watcher_label">Lifelog browser watcher</string>
+    <string name="web_watcher_description">Sees only the browsers listed in the app, and reads two things there: the site in the address bar (never the full address) and the page title. Lifelog sends them to the one server this phone is paired with, and nowhere else.</string>
+    <string name="media_watcher_label">Lifelog video watcher</string>
+</resources>
