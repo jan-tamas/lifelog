@@ -23,6 +23,12 @@ data class MediaSegment(val start: Long, val end: Long, val pkg: String, val tit
  * the moment it paused, the screen went off or the keyguard came up. A pause
  * followed within a second by a resume of the same app is one session (an
  * activity handing over to another of the same app).
+ *
+ * A STOP ends nothing. Android pauses an activity before it stops it, and when
+ * one screen of an app hands over to another the order is: old one paused, new
+ * one resumed, old one stopped. Read as an end, that late stop closed the
+ * session a second after every change of screen inside an app, and the vault
+ * saw a third of the WhatsApp time ActivityWatch did (found 2026-11-25).
  */
 object Usage {
     // android.app.usage.UsageEvents.Event constants, copied so this runs on the JVM.
@@ -60,7 +66,7 @@ object Usage {
                         cur = e.pkg; start = e.ts; open = true
                     }
                 }
-                ACTIVITY_PAUSED, ACTIVITY_STOPPED -> if (cur == e.pkg && open) {
+                ACTIVITY_PAUSED -> if (cur == e.pkg && open) {
                     open = false; closedAt = e.ts
                 }
                 SCREEN_NON_INTERACTIVE, KEYGUARD_SHOWN, DEVICE_SHUTDOWN ->

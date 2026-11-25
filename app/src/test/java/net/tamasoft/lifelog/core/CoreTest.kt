@@ -92,6 +92,23 @@ class UsageTest {
         assertNull(s[2].end)                        // still in front: not sent yet
     }
 
+    @Test fun aScreenChangeInsideAnAppDoesNotEndTheSession() {
+        // Chrome opened from a link: its launcher hands over to the browser
+        // window, and the launcher's STOP arrives after the window's RESUME.
+        val s = Usage.sessions(listOf(
+            UsageEvent(ms("2026-11-24T07:45:16Z"), Usage.ACTIVITY_RESUMED, "chrome"),
+            UsageEvent(ms("2026-11-24T07:45:16.300Z"), Usage.ACTIVITY_PAUSED, "chrome"),
+            UsageEvent(ms("2026-11-24T07:45:16.350Z"), Usage.ACTIVITY_RESUMED, "chrome"),
+            UsageEvent(ms("2026-11-24T07:45:17Z"), Usage.ACTIVITY_STOPPED, "chrome"),
+            UsageEvent(ms("2026-11-24T07:47:14Z"), Usage.ACTIVITY_PAUSED, "chrome"),
+            UsageEvent(ms("2026-11-24T07:47:14.100Z"), Usage.ACTIVITY_RESUMED, "home"),
+            UsageEvent(ms("2026-11-24T07:47:14.600Z"), Usage.ACTIVITY_STOPPED, "chrome"),
+            UsageEvent(ms("2026-11-24T07:48:00Z"), Usage.SCREEN_NON_INTERACTIVE, ""),
+        ))
+        assertEquals(Session("chrome", ms("2026-11-24T07:45:16Z"), ms("2026-11-24T07:47:14Z")), s[0])
+        assertEquals(2, s.size)
+    }
+
     @Test fun aSessionAcrossMidnightIsSplit() {
         val start = ms("2026-11-02T22:50:00Z")      // 23:50 in Prague
         val end = ms("2026-11-02T23:20:00Z")        // 00:20
